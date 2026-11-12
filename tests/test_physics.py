@@ -175,3 +175,26 @@ def test_natural_hit_test_only_accepts_accumulated_snow():
     assert not w.hit_snow(600,580)
     w.throw(500,200,0,0,20)
     assert w.hit_snow(500,200)
+
+
+def test_window_support_inset_avoids_rounded_corners():
+    from sneg.platforms import exposed_edges
+    assert exposed_edges([Rect('window',100,200,400,300)],inset=12)==[('window:12',112,200,376)]
+
+
+def test_snow_breaks_in_slabs_with_a_quiet_period():
+    from sneg.physics import Surface,STEP
+    s=Surface('window',100,200,400)
+    s.depth=[35.]*len(s.depth)
+    before=sum(s.depth)*STEP
+    chunks=s.relax(.033)
+    assert chunks and all(mass>=144 for _,mass,_ in chunks)
+    assert abs(sum(s.depth)*STEP+sum(mass for _,mass,_ in chunks)-before)<1e-6
+    for _ in range(20):
+        assert all(direction!=chunks[0][2] for _,_,direction in s.relax(.033))
+
+
+def test_thin_snow_does_not_drip():
+    from sneg.physics import Surface
+    s=Surface('window',100,200,400);s.depth=[2.]*len(s.depth)
+    for _ in range(200):assert s.relax(.033)==[]

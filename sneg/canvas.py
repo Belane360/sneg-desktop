@@ -111,7 +111,7 @@ class SnowCanvas(QWidget):
             path = QPainterPath(QPointF(s.x,s.y+1))
             points = [QPointF(s.x+min(i*STEP,s.width),s.y-d) for i,d in enumerate(s.depth)]
             if not s.ground:
-                path.quadTo(QPointF(s.x-2,s.y), points[0])
+                path.quadTo(QPointF(s.x,s.y), points[0])
             else:
                 path.lineTo(points[0])
             for a,b in zip(points,points[1:]):
@@ -133,8 +133,21 @@ class SnowCanvas(QWidget):
                 gradient.setColorAt(0,QColor('#ffffff'));gradient.setColorAt(1,QColor('#c3dfec'))
                 p.setBrush(gradient)
             else: p.setBrush(QColor(246,252,255,200))
-            radius=particle.radius if not particle.mass else min(5,1+math.sqrt(particle.mass)/8)
-            p.drawEllipse(QPointF(particle.x,particle.y),radius,radius)
+            if particle.mass:
+                # An irregular soft slab, visibly different from round snowflakes.
+                radius=max(3,math.sqrt(particle.mass/math.pi))
+                path=QPainterPath()
+                for index in range(10):
+                    angle=index*math.tau/10
+                    wobble=1+.13*math.sin(index*2.7+particle.mass)
+                    point=QPointF(particle.x+math.cos(angle)*radius*wobble,
+                                 particle.y+math.sin(angle)*radius*.7*wobble)
+                    if index==0:path.moveTo(point)
+                    else:path.lineTo(point)
+                path.closeSubpath()
+                p.setBrush(QColor('#eef8fc'));p.drawPath(path)
+            else:
+                p.drawEllipse(QPointF(particle.x,particle.y),particle.radius,particle.radius)
         self.paint_plow(p)
         if self.pointer and self.mode == 'shovel':
             x,y=self.pointer

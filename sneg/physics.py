@@ -15,6 +15,8 @@ class Surface:
     depth: list[float] = field(default_factory=list)
     ice: list[float] = field(default_factory=list)
 
+    fall_cooldown: list[float] = field(default_factory=lambda:[0., .55])
+
     def __post_init__(self): self.resize(self.width)
 
     @property
@@ -67,10 +69,20 @@ class Surface:
                     self.depth[i]+=transfer; self.depth[i+1]-=transfer
         runoff=[]
         if not self.ground:
-            for index,x,direction in [(0,self.x-3,-1),(-1,self.x+self.width+3,1)]:
-                amount=max(0,self.depth[index]-1.5)*min(1,dt*6)
-                self.depth[index]-=amount
-                if amount: runoff.append((x,amount*STEP,direction))
+            for edge,(x,direction) in enumerate([(self.x-9,-1),(self.x+self.width+9,1)]):
+                self.fall_cooldown[edge]=max(0,self.fall_cooldown[edge]-dt)
+                indices=list(range(min(3,len(self.depth))))
+                if edge:indices=[len(self.depth)-1-i for i in indices]
+                available=[max(0,self.depth[i]-max(1.5,self.ice[i])) for i in indices]
+                mass=sum(available)*STEP
+                # Cohesive snow holds together until a small slab can break off.
+                # The quiet period separates avalanches instead of emitting a stream.
+                if mass>=180 and self.fall_cooldown[edge]<=0:
+                    detached=min(mass*.8,1100.)
+                    for i,amount in zip(indices,available):
+                        self.depth[i]-=amount*detached/mass
+                    runoff.append((x,detached,direction))
+                    self.fall_cooldown[edge]=1.4
         return runoff
 
 @dataclass
@@ -234,10 +246,8 @@ class World:
                 melt=max(0,d-s.ice[i])*MELT_RATE*dt
                 s.depth[i]-=melt;self.melted_mass+=melt*STEP
             for x,mass,direction in s.relax(dt):
-                # Accumulate nearby runoff into existing chunks instead of dropping mass.
-                match=next((p for p in self.clumps[-12:] if abs(p.x-x)<6 and abs(p.y-s.y)<10 and p.vx*direction>0),None)
-                if match: match.mass+=mass
-                else: self.clumps.append(Particle(x,s.y+3,25*direction,25,2,mass=mass))
+                radius=math.sqrt(mass/math.pi)
+                self.clumps.append(Particle(x,s.y+radius+3,38*direction,18,radius,mass=mass))
         self.spawn_credit+=dt*self.intensity*self.width/1000
         count=min(int(self.spawn_credit),max(0,1800-len(self.flakes)))
         self.spawn_credit-=int(self.spawn_credit)

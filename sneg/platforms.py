@@ -31,12 +31,12 @@ def mac_window_rects(rows, own_pid):
             result.append(Rect(str(row['kCGWindowNumber']),b['X'],b['Y'],b['Width'],b['Height']))
     return result
 
-def exposed_edges(rects):
+def exposed_edges(rects, inset=0):
     """Front-to-back rectangles; remove edges hidden by nearer windows."""
     occluders = []
     edges = []
     for r in rects:
-        spans = [(r.x, r.x+r.w)]
+        spans = [(r.x+inset, r.x+r.w-inset)]
         for front in occluders:
             if front.y <= r.y < front.y+front.h:
                 next_spans = []
@@ -137,7 +137,7 @@ class WindowProvider:
         g = screen.geometry()
         sx,sy = g.width()/w,g.height()/h
         edges = []
-        for key,a,b,length in exposed_edges(rows):
+        for key,a,b,length in exposed_edges(rows,inset=12):
             left,right = max(x,a),min(x+w,a+length)
             if max(y+4,screen.availableGeometry().top()+18) <= b < y+h and right > left:
                 edges.append((key,(left-x)*sx,(b-y)*sy,(right-left)*sx))

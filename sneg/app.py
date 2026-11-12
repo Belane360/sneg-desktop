@@ -43,7 +43,7 @@ class Panel(QWidget):
         super().__init__()
         self.c = controller
         self.setProperty("snegPanel",True)
-        self.setWindowTitle('Снег 0.4 — маленькая зима')
+        self.setWindowTitle('Снег 0.4.1 — маленькая зима')
         self.setWindowIcon(icon())
         self.setStyleSheet(STYLE)
         self.setMinimumWidth(630)
