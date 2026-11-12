@@ -57,6 +57,7 @@ class WindowProvider:
     def __init__(self):
         self.status = ''
         self.monitors = {}
+        self.dock_rows = []
         if sys.platform == 'win32':
             self._init_windows()
 
@@ -78,6 +79,10 @@ class WindowProvider:
         if sys.platform == 'darwin':
             from .macos import window_info
             rows = window_info()
+            self.dock_rows=[row for row in rows if row.get('kCGWindowOwnerName')=='Dock'
+                            and row.get('kCGWindowLayer')==20
+                            and row.get('kCGWindowIsOnscreen',False)
+                            and row.get('kCGWindowAlpha',1)>.5]
             result = mac_window_rects(rows, os.getpid())
             self.status = 'Границы окон macOS подключены'
             return result
@@ -154,4 +159,16 @@ class WindowProvider:
             if a+c>0 and a<g.width() and b+d>0 and b<g.height():
                 result.append((*rect,list(front)))
             front.append(rect)
+        return result
+
+    def docks_for(self,screen):
+        x,y,w,h=self.screen_bounds(screen)
+        g=screen.geometry();sx,sy=g.width()/w,g.height()/h
+        result=[]
+        for row in self.dock_rows:
+            b=row.get('kCGWindowBounds',{})
+            a,t,ww,hh=(b.get(k,0) for k in ('X','Y','Width','Height'))
+            # The bottom Dock, not fullscreen Mission Control / desktop overlays.
+            if ww>=100 and 20<=hh<=h*.35 and y+h-24<=t+hh<=y+h+24 and a<x+w and a+ww>x:
+                result.append(((a-x)*sx,(t-y)*sy,ww*sx,hh*sy))
         return result

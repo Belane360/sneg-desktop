@@ -43,7 +43,7 @@ class Panel(QWidget):
         super().__init__()
         self.c = controller
         self.setProperty("snegPanel",True)
-        self.setWindowTitle('Снег 0.4.2 — маленькая зима')
+        self.setWindowTitle('Снег 0.5 — маленькая зима')
         self.setWindowIcon(icon())
         self.setStyleSheet(STYLE)
         self.setMinimumWidth(630)
@@ -222,12 +222,14 @@ class Controller:
                 edges=self.provider.edges_for(screen,rows)
                 overlay.world.set_surfaces([('ground',0,ground,g.width())]+edges)
                 overlay.frames=self.provider.frames_for(screen,rows)
+                overlay.world.docks=self.provider.docks_for(screen)
             self.panel.status.setText('Предпросмотр · окна здесь демонстрационные' if self.preview_only else self.provider.status)
         except Exception as error:
             self.panel.status.setText('Окна недоступны: '+str(error)[:100])
             for overlay in self.overlays:
                 overlay.world.set_surfaces([('ground',0,overlay.height(),overlay.width())])
                 overlay.frames=[]
+                overlay.world.docks=[]
 
     def set_intensity(self,value):
         for canvas in self.canvases(): canvas.world.intensity=value

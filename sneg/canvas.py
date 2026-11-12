@@ -113,7 +113,10 @@ class SnowCanvas(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         w,h = self.width(),self.height()
         if not self.preview:
-            p.setClipRect(QRect(0,self.top_clearance,w,max(0,h-self.top_clearance)))
+            region=QRegion(QRect(0,self.top_clearance,w,max(0,h-self.top_clearance)))
+            for x,y,width,height in self.world.docks:
+                region=region.subtracted(QRegion(QRect(int(x)-1,int(y)-1,math.ceil(width)+2,math.ceil(height)+2)))
+            p.setClipRegion(region)
         if self.preview:
             gradient = QLinearGradient(0,0,w,h)
             gradient.setColorAt(0,QColor('#172e35')); gradient.setColorAt(1,QColor('#314b49'))
@@ -162,6 +165,7 @@ class SnowCanvas(QWidget):
                 p.setBrush(QColor('#eef8fc'));p.drawPath(path)
             else:
                 p.drawEllipse(QPointF(particle.x,particle.y),particle.radius,particle.radius)
+        self.paint_snowmen(p)
         self.paint_plow(p)
         if self.pointer and self.mode == 'shovel':
             x,y=self.pointer
@@ -193,6 +197,36 @@ class SnowCanvas(QWidget):
                 p.drawLine(QPointF(x,y),QPointF(x+2,y+5))
                 p.drawLine(QPointF(x+2,y+5),QPointF(x+4,y+2))
         p.restore()
+
+    def paint_snowmen(self,p):
+        for base,body,head in self.world.snowmen:
+            r=head.radius;x,y=head.x,head.y
+            p.save()
+            # Twig arms and fingers.
+            p.setPen(QPen(QColor('#846044'),max(1.5,r*.11),Qt.SolidLine,Qt.RoundCap))
+            for direction in (-1,1):
+                sx=body.x+direction*body.radius*.8;sy=body.y-3
+                ex=sx+direction*body.radius*.9;ey=sy-body.radius*.45
+                p.drawLine(QPointF(sx,sy),QPointF(ex,ey))
+                p.drawLine(QPointF(ex,ey),QPointF(ex+direction*5,ey-7))
+                p.drawLine(QPointF(ex,ey),QPointF(ex+direction*8,ey+1))
+            p.setPen(Qt.NoPen);p.setBrush(QColor('#253a42'))
+            for dx in (-.32,.27):p.drawEllipse(QPointF(x+r*dx,y-r*.15),max(1,r*.095),max(1,r*.095))
+            for t in (-.45,0,.45):
+                p.drawEllipse(QPointF(x+r*t*.6,y+r*(.32-.18*t*t)),max(.7,r*.05),max(.7,r*.05))
+            nose=QPainterPath(QPointF(x,y+r*.02));nose.lineTo(x+r*.85,y+r*.17);nose.lineTo(x,y+r*.24);nose.closeSubpath()
+            p.setBrush(QColor('#ef8d38'));p.drawPath(nose)
+            # Warm red scarf and a gently tilted tail.
+            p.setBrush(QColor('#b94845'))
+            p.drawRoundedRect(QRectF(x-r*.95,y+r*.72,r*1.9,r*.32),r*.12,r*.12)
+            p.drawRoundedRect(QRectF(x+r*.3,y+r*.92,r*.35,r*.9),r*.1,r*.1)
+            p.setBrush(QColor('#273b43'))
+            p.drawRoundedRect(QRectF(x-r*.67,y-r*1.7,r*1.34,r*.9),r*.12,r*.12)
+            p.drawRoundedRect(QRectF(x-r,y-r*.87,r*2,r*.17),r*.07,r*.07)
+            p.setBrush(QColor('#b94845'));p.drawRect(QRectF(x-r*.67,y-r*1.04,r*1.34,r*.16))
+            p.setBrush(QColor('#52676d'))
+            for offset in (-.28,.3):p.drawEllipse(QPointF(body.x,body.y+body.radius*offset),max(1.3,r*.11),max(1.3,r*.11))
+            p.restore()
 
     def paint_plow(self,p):
         truck=self.world.plow

@@ -96,6 +96,7 @@ class Particle:
     ball: bool = False
     mass: float = 0.
     support: str = ''
+    snowman: int = 0
 
 @dataclass
 class Plow:
@@ -118,6 +119,9 @@ class World:
         self.removed_mass=0.
         self.melted_mass=0.
         self.frost=0.
+        self.docks=[]
+        self.snowmen=[]
+        self.next_snowman=1
 
     def set_surfaces(self, rows):
         fresh={}
@@ -133,7 +137,7 @@ class World:
     def clear(self):
         for s in self.surfaces.values():
             s.depth=[0.]*len(s.depth);s.ice=[0.]*len(s.depth)
-        self.balls.clear();self.sparks.clear();self.clumps.clear()
+        self.balls.clear();self.sparks.clear();self.clumps.clear();self.snowmen.clear()
         self.plow=None
 
     def brush(self,x,y,radius=35):
@@ -146,6 +150,7 @@ class World:
         return amount
 
     def hit_snow(self,x,y):
+        if any(a<=x<=a+w and b<=y<=b+h for a,b,w,h in self.docks):return False
         if any(math.hypot(b.x-x,b.y-y)<=b.radius+3 for b in self.balls):return True
         for s in self.surfaces.values():
             if s.x<=x<=s.x+s.width and s.height(x)>2:
@@ -155,8 +160,11 @@ class World:
     def pickup(self,x,y):
         for b in reversed(self.balls):
             if math.hypot(b.x-x,b.y-y)<=b.radius+8:
-                self.balls.remove(b)
-                return math.pi*b.radius*b.radius
+                group=next((parts for parts in self.snowmen if b in parts),[b])
+                for part in group:
+                    if part in self.balls:self.balls.remove(part)
+                self.snowmen=[parts for parts in self.snowmen if parts is not group]
+                return sum(math.pi*part.radius*part.radius for part in group)
         return 0.
 
     def shovel(self,x,y,direction=1):
@@ -202,8 +210,9 @@ class World:
                     p.load+=(d-remaining)*STEP
                     s.depth[i]=remaining;s.ice[i]=remaining
             for b in self.balls[:]:
+                if b not in self.balls:continue
                 if abs(b.x-blade)<=b.radius+18 and b.y+b.radius>=s.y-s.height(b.x)-5:
-                    p.load+=math.pi*b.radius*b.radius;self.balls.remove(b)
+                    p.load+=self.pickup(b.x,b.y)
         if p.x>self.width+80 or p.x<-80:
             self.removed_mass+=p.load
             self.plow=None;self.next_plow=self.plow_interval
@@ -212,7 +221,9 @@ class World:
         # Resolve bottom balls first so piles can support upper balls.
         self.balls.sort(key=lambda b:b.y,reverse=True)
         settled=[]
+        upper={id(part) for parts in self.snowmen for part in parts[1:]}
         for b in self.balls:
+            if id(b) in upper:continue
             old_y=b.y
             b.vy+=440*dt;b.x+=b.vx*dt;b.y+=b.vy*dt
             b.x=max(b.radius,min(self.width-b.radius,b.x))
@@ -233,10 +244,57 @@ class World:
                         b.y=top;b.vy=0;b.vx*=math.exp(-5*dt)
                         b.support=other.support
                         # Off-centre balls roll down, rather than forming vertical spikes.
-                        b.vx+=dx/limit*65*dt
+                        if abs(dx)<min(b.radius,other.radius)*.6 and abs(b.vx-other.vx)<80:
+                            b.x=other.x;b.vx=other.vx
+                            b.y=other.y-limit
+                        else:b.vx+=dx/limit*65*dt
             if b.y+b.radius>self.height:
                 b.y=self.height-b.radius;b.vy=0;b.vx*=math.exp(-3*dt)
             settled.append(b)
+
+    def push_docks(self):
+        ground=next((s for s in self.surfaces.values() if s.ground),None)
+        if not ground:return
+        for x,y,width,height in self.docks:
+            left_mass=right_mass=0.
+            for i,d in enumerate(ground.depth):
+                px=ground.x+min(i*STEP,ground.width)
+                if x<=px<=x+width and ground.y>=y-36:
+                    if px<x+width/2:left_mass+=d*STEP
+                    else:right_mass+=d*STEP
+                    ground.depth[i]=0.;ground.ice[i]=0.
+            left=max(ground.x+3,x-26);right=min(ground.x+ground.width-3,x+width+26)
+            if left_mass:ground.add_mass(left,left_mass)
+            if right_mass:ground.add_mass(right,right_mass)
+            for b in self.balls:
+                if x-b.radius<b.x<x+width+b.radius and y-b.radius<b.y<y+height+b.radius:
+                    b.x=max(b.radius,x-b.radius-3) if b.x<x+width/2 else min(self.width-b.radius,x+width+b.radius+3)
+                    b.vx=0
+
+    def glue_snowmen(self):
+        # Keep a glued figure rigid; only its base is simulated as a free body.
+        self.snowmen=[parts for parts in self.snowmen if all(p in self.balls for p in parts)]
+        free=sorted((b for b in self.balls if not b.snowman and abs(b.vx)<20 and abs(b.vy)<20),key=lambda b:b.y,reverse=True)
+        for base in free:
+            if base.snowman:continue
+            for middle in free:
+                if middle is base or middle.snowman or not 3<=middle.radius<=base.radius*1.15:continue
+                if middle.y>=base.y or abs(middle.x-base.x)>min(base.radius,middle.radius)*.7:continue
+                if abs(math.hypot(middle.x-base.x,middle.y-base.y)-base.radius-middle.radius)>4:continue
+                head=next((b for b in free if b is not base and b is not middle and not b.snowman
+                           and 3<=b.radius<=middle.radius*1.15 and b.y<middle.y
+                           and abs(b.x-middle.x)<min(b.radius,middle.radius)*.7
+                           and abs(math.hypot(b.x-middle.x,b.y-middle.y)-b.radius-middle.radius)<4),None)
+                if head:
+                    parts=(base,middle,head)
+                    for b in parts:b.snowman=self.next_snowman
+                    self.next_snowman+=1;self.snowmen.append(parts);break
+        for base,middle,head in self.snowmen:
+            middle.x=head.x=base.x
+            middle.y=base.y-base.radius-middle.radius+2
+            head.y=middle.y-middle.radius-head.radius+2
+            middle.vx=head.vx=base.vx;middle.vy=head.vy=base.vy
+            middle.support=head.support=base.support
 
     def update(self,dt):
         dt=min(.05,max(0,dt));self.time+=dt
@@ -274,5 +332,7 @@ class World:
                 else: remaining.append(p)
             else: remaining.append(p)
         self.clumps=remaining
+        self.push_docks()
         self._move_balls(dt)
+        self.glue_snowmen()
         self.update_plow(dt)

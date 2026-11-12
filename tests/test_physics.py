@@ -198,3 +198,37 @@ def test_thin_snow_does_not_drip():
     from sneg.physics import Surface
     s=Surface('window',100,200,400);s.depth=[2.]*len(s.depth)
     for _ in range(200):assert s.relax(.033)==[]
+
+
+def test_three_stacked_balls_glue_into_rigid_snowman():
+    w=quiet_world()
+    for r in (26,19,13):
+        w.throw(350,200,0,0,r)
+        for _ in range(100):w.update(.05)
+    assert len(w.snowmen)==1
+    base,body,head=w.snowmen[0]
+    assert len({b.snowman for b in (base,body,head)})==1
+    assert base.x==body.x==head.x
+    for _ in range(200):w.update(.05)
+    assert len(w.snowmen)==1 and len(w.balls)==3
+    assert abs(body.y-(base.y-base.radius-body.radius+2))<.01
+
+
+def test_three_separate_balls_do_not_form_snowman():
+    w=quiet_world()
+    for x in (100,350,600):w.throw(x,530,0,0,20)
+    for _ in range(100):w.update(.05)
+    assert not w.snowmen
+
+
+def test_dock_pushes_snow_without_deleting_mass_or_taking_clicks():
+    w=quiet_world();s=w.surfaces['ground'];s.depth=[20.]*len(s.depth)
+    before=mass(w);w.docks=[(200,510,400,90)]
+    w.push_docks()
+    assert abs(mass(w)-before)<1e-5
+    assert all(d==0 for i,d in enumerate(s.depth) if 200<=i*6<=600)
+    assert not w.hit_snow(300,580)
+    w.docks=[(160,500,480,100)];w.push_docks()
+    assert abs(mass(w)-before)<1e-5
+    w.docks=[];w.update(.05)
+    assert abs(mass(w)-before)<1e-5
