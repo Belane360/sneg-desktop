@@ -5,6 +5,30 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QLinearGradient, QFont
 from PySide6.QtWidgets import QWidget, QApplication
 from .physics import World, STEP
 
+def snow_path(surface):
+    """Round the profile into two tapered tips, with no vertical closing edges."""
+    baseline=surface.y+1 if surface.ground else surface.y
+    path=QPainterPath(QPointF(surface.x,baseline))
+    if surface.ground:
+        points=[QPointF(surface.x+min(i*STEP,surface.width),surface.y-d)
+                for i,d in enumerate(surface.depth)]
+        path.lineTo(points[0])
+    else:
+        taper=min(surface.width/3, max(24,min(46,max(surface.depth)*1.4)))
+        points=[]
+        count=math.ceil(surface.width/3)
+        for i in range(count+1):
+            offset=surface.width*i/count
+            distance=min(offset,surface.width-offset)
+            weight=math.sin(min(1,distance/taper)*math.pi/2)**1.35
+            points.append(QPointF(surface.x+offset,surface.y-surface.height(surface.x+offset)*weight))
+    for left,right in zip(points,points[1:]):
+        path.quadTo(left,QPointF((left.x()+right.x())/2,(left.y()+right.y())/2))
+    path.quadTo(points[-1],QPointF(surface.x+surface.width,baseline))
+    path.closeSubpath()
+    return path
+
+
 class SnowCanvas(QWidget):
     exit_interaction = Signal()
 
@@ -107,17 +131,7 @@ class SnowCanvas(QWidget):
             p.drawText(22,h-32,'Проведите по сугробу — здесь уже можно играть')
         self.paint_frost(p)
         for s in self.world.surfaces.values():
-            # A quadratic spline rounds the granular height field and the end caps.
-            path = QPainterPath(QPointF(s.x,s.y+1))
-            points = [QPointF(s.x+min(i*STEP,s.width),s.y-d) for i,d in enumerate(s.depth)]
-            if not s.ground:
-                path.quadTo(QPointF(s.x,s.y), points[0])
-            else:
-                path.lineTo(points[0])
-            for a,b in zip(points,points[1:]):
-                path.quadTo(a,QPointF((a.x()+b.x())/2,(a.y()+b.y())/2))
-            path.quadTo(points[-1],QPointF(s.x+s.width,s.y+1))
-            path.closeSubpath()
+            path = snow_path(s)
             gradient = QLinearGradient(0,s.y-25,0,s.y+1)
             gradient.setColorAt(0,QColor('#ffffff')); gradient.setColorAt(1,QColor('#c3dde8'))
             p.setPen(Qt.NoPen);p.setBrush(gradient);p.drawPath(path)

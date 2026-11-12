@@ -125,3 +125,19 @@ def test_frost_does_not_outline_invisible_window_rectangles():
     assert image.pixelColor(10,100).alpha()==0
     assert image.pixelColor(100,210).alpha()==0
     canvas.close()
+
+
+def test_window_snow_cap_tapers_to_pointed_tips():
+    from sneg.canvas import snow_path
+    from sneg.physics import Surface
+    from PySide6.QtCore import QPointF
+    s=Surface('window',100,200,300);s.depth=[20.]*len(s.depth)
+    path=snow_path(s)
+    assert path.boundingRect().left()>=100
+    assert path.boundingRect().right()<=400
+    assert path.contains(QPointF(250,185))
+    assert not path.contains(QPointF(101,195))
+    assert not path.contains(QPointF(399,195))
+    assert path.contains(QPointF(120,195))
+    assert path.contains(QPointF(380,195))
+    assert path.boundingRect().bottom()==200
