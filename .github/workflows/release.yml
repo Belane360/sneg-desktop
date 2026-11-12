@@ -1,0 +1,28 @@
+name: Publish update
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libpulse0
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - run: python packaging/make_update.py "$GITHUB_REF_NAME"
+      - run: python packaging/make_mac_launcher.py
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/Sneg-update.zip dist/Sneg-update.zip.sha256 dist/Sneg-Mac-*.zip
+          --title "Снег $GITHUB_REF_NAME" --generate-notes
